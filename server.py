@@ -2,18 +2,11 @@ import os
 import json
 import requests
 from flask import Flask, request, jsonify
-from dotenv import load_dotenv
 
-
-load_dotenv()
+import smtplib
+from email.message import EmailMessage
 
 app = Flask(__name__)
-
-
-WHATSAPP_TOKEN = os.getenv("WHATSAPP_TOKEN")
-PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
-RECIPIENT_WAID = os.getenv("RECIPIENT_WAID")
-WHATSAPP_API_URL = f"https://graph.facebook.com/v17.0/{PHONE_NUMBER_ID}/messages"
 
 @app.route('/analysis', methods=['POST'])
 def tago_analysis():
@@ -22,20 +15,22 @@ def tago_analysis():
     """
     print("Recebida requisição do Tago.io!")
 
-   
+    # Pega o corpo da requisição (geralmente uma lista de objetos)
     data = request.get_json()
 
     if not data:
         return jsonify({"status": "error", "message": "Nenhum dado recebido"}), 400
 
+    # O Tago.io envia um array. Vamos pegar o dado mais recente (o primeiro).
+    # Ajuste isso conforme a lógica do seu dispositivo.
     latest_data = data[0]
     device_status = latest_data.get('value')
     device_variable = latest_data.get('variable')
 
     print(f"Variável: {device_variable}, Valor: {device_status}")
 
-  
-    message_sent = send_whatsapp_message(device_variable, device_status)
+    # Formata a mensagem e envia para o WhatsApp
+    message_sent =send_email(device_variable, device_status)
 
     if message_sent:
         return jsonify({"status": "success", "message": "Mensagem do WhatsApp enviada."})
@@ -43,55 +38,32 @@ def tago_analysis():
         return jsonify({"status": "error", "message": "Falha ao enviar mensagem do WhatsApp."}), 500
 
 
-def send_whatsapp_message(variable_name, status):
-    """
-    Função que monta e envia a mensagem usando a API Cloud da Meta.
-    Usa um TEMPLATE pré-aprovado.
-    """
-    headers = {
-        "Authorization": f"Bearer {WHATSAPP_TOKEN}",
-        "Content-Type": "application/json",
-    }
-    
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": RECIPIENT_WAID,
-        "type": "template",
-        "template": {
-            "name": "device_status_update", 
-            "language": {
-                "code": "pt_BR"
-            },
-            "components": [
-                {
-                    "type": "body",
-                    "parameters": [
-                        {
-                            "type": "text",
-                            "text": str(variable_name)
-                        },
-                        {
-                            "type": "text",
-                            "text": str(status)
-                        }
-                    ]
-                }
-            ]
-        }
-    }
+def send_email(variable_name, status):
+    # Configuração da mensagem
+    msg = EmailMessage()
+    msg["Subject"] = "Teste de Envio Python"
+    msg["From"] = "pur.equipamentos@gmail.com"
+    msg["To"] = "gabrielsouza.oliveira630@gmail.com"
+    msg.set_content(f"Mensagem de teste enviada .vari = {variable_name} // status = {status}.")
+
+# Credenciais (Use Senha de Aplicativo se for conta pessoal!)
+    email_login = "pur.equipametos@gmail.com"
+    senha_app = "kjczghkwnvajnubq" 
 
     try:
-        response = requests.post(WHATSAPP_API_URL, headers=headers, data=json.dumps(payload))
-        response.raise_for_status()  
+        with smtplib.SMTP("smtp.gmail.com", 587) as smtp:
+            smtp.ehlo()      # Identifica-se para o servidor (boa prática)
+            smtp.starttls()  # Criptografa a conexão
+            smtp.ehlo()      # Re-identifica após criptografia (necessário em alguns servidores)
         
-        print("Resposta da API do WhatsApp:", response.json())
-        return True
-    except requests.exceptions.RequestException as e:
-        print(f"Erro ao enviar mensagem para o WhatsApp: {e}")
-        print("Corpo da resposta:", e.response.text if e.response else "Nenhuma resposta")
-        return False
+            smtp.login(email_login, senha_app)
+            smtp.send_message(msg)
+        
+        print("Email enviado com sucesso!")
 
+    except Exception as e:
+        print(f"Erro ao enviar: {e}")
 
 if __name__ == '__main__':
-   
+    # Roda o servidor na porta 5000, acessível por qualquer IP na sua rede.
     app.run(host='0.0.0.0', port=5000, debug=True)
